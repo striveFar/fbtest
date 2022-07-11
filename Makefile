@@ -1,7 +1,7 @@
 # Makefile for natively compiling the fbtest program 
 #
 
-CC = gcc
+CC = arm-linux-gnueabi-gcc
 CFLAGS = -O2 -Wall
 
 OBJS = main.o
