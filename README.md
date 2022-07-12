@@ -1,23 +1,5 @@
 ## fbtest
 
-A simple program to draw a rectangle of fixed color to the 
-Linux frame buffer display. The rectangle will have a border
-of fixed color, 10 pixels wide.
- 
-Used for display driver development.
-
-#### Cross-compiling
-
-Assuming a Yocto built toolchain
-
-    export OETMP=<TMPDIR>
-    make -f Makefile-cross
-
-The default `Makefile-cross` assumes a hard-fp built gcc.
-
-Comment the hard-fp line and uncomment the soft-fp line if
-that's what you have.
-
 #### Natively compiling
 
     make
@@ -25,13 +7,8 @@ that's what you have.
 #### Running
 
     root@overo:~# ./fbtest -h
-
-    Usage ./fbtest: [-r<red>] [-g<green>] [-b<blue>] [-B<border>]
+    Usage ./fbtest: [-r<red>] [-g<green>] [-b<blue>]
       All colors default to 0xff
-      The border color applies to all rgb and is 10 pixels wide
-      If border is not provided, none is drawn.
-      The index defaults to 0, if your FB has more than 1 buffers, you can set it.
-      If set the index to -1, we will use all buffers for 20 times.
 
 Examples
 
@@ -43,8 +20,6 @@ Examples
     root@overo:~# ./fbtest -r0x40 -g0 -b0
     root@overo:~# ./fbtest -r0x40 -g0x40 -b0
     root@overo:~# ./fbtest -r0x40 -g0x40 -b0x30
-    root@overo:~# ./fbtest -r0x40 -g0x40 -b0x30 -B0xaa
-    root@overo:~# ./fbtest -r0x40 -g0x40 -b0x30 -B0xaa -i -1
 
 #### Stop the blinking cursor
 
@@ -57,3 +32,28 @@ Kernel command line parameter
 
     echo 0 > /sys/class/graphics/fb0/blank
 
+## LCD 屏幕色彩测试
+
+## 使用RGB565格式
+
+![Untitled](https://s3-us-west-2.amazonaws.com/secure.notion-static.com/ed37d68a-873c-4c76-8bae-be5be5780fe1/Untitled.png)
+
+用法：每个色彩值范围 应在0~255之间
+
+```bash
+
+Usage ./fbtest: [-r<red>] [-g<green>] [-b<blue>]
+```
+
+执行以下命令，观察颜色是否正常，有无漏光
+
+```markdown
+# 红色
+./fbtest -r255 -g0 -b0
+# 绿色
+./fbtest -r0 -g255 -b0
+# 蓝色
+./fbtest -r0 -g0 -b255
+# 黄色
+./fbtest -r255 -g255 -b0
+```
