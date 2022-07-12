@@ -1,55 +1,55 @@
 /*
-  Simple framebuffer testing program
+   Simple framebuffer testing program
 
-  Set the screen to a given color. For use in developing Linux
-  display drivers.
+   Set the screen to a given color. For use in developing Linux
+   display drivers.
 
-  Copyright (c) 2014, Jumpnow Technologies, LLC
-  All rights reserved.
+   Copyright (c) 2014, Jumpnow Technologies, LLC
+   All rights reserved.
 
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions
+   are met:
 
-  1. Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
+   1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
 
-  2. Redistributions in binary form must reproduce the above copyright
-     notice, this list of conditions and the following disclaimer in the
-     documentation and/or other materials provided with the distribution.
+   2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
 
-  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-  HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
-  TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-  NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+   HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+   TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  Ideas taken from the Yocto Project psplash program.
- */
+   Ideas taken from the Yocto Project psplash program.
+   */
 
+#include <errno.h>
+#include <fcntl.h>
+#include <getopt.h>
+#include <limits.h>
+#include <linux/fb.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
-#include <unistd.h>
-#include <errno.h>
-#include <time.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <linux/fb.h>
-#include <getopt.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
-struct fb_config
-{
+struct fb_config {
 	int fd;
 	int width;
 	int height;
@@ -69,8 +69,15 @@ struct fb_config
 	char *base;
 };
 
-void dump_vscreeninfo(struct fb_var_screeninfo *fvsi)
+static void fbdev_blank(int _fp, bool blank)
 {
+	int ret;
+	ret = ioctl(_fp, FBIOBLANK, blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
+	if (ret < 0)
+		perror("ioctl(): blank");
+}
+
+void dump_vscreeninfo(struct fb_var_screeninfo *fvsi) {
 	printf("======= FB VAR SCREENINFO =======\n");
 	printf("xres: %d\n", fvsi->xres);
 	printf("yres: %d\n", fvsi->yres);
@@ -93,12 +100,10 @@ void dump_vscreeninfo(struct fb_var_screeninfo *fvsi)
 	printf("    offset   : %d\n", fvsi->transp.offset);
 	printf("    length   : %d\n", fvsi->transp.length);
 	printf("    msb_right: %d\n", fvsi->transp.msb_right);
-
 	printf("=================================\n");
 }
 
-void dump_fscreeninfo(struct fb_fix_screeninfo *ffsi)
-{
+void dump_fscreeninfo(struct fb_fix_screeninfo *ffsi) {
 	printf("======= FB FIX SCREENINFO =======\n");
 	printf("id          : %s\n", ffsi->id);
 	printf("smem_start  : 0x%08lX\n", ffsi->smem_start);
@@ -107,81 +112,91 @@ void dump_fscreeninfo(struct fb_fix_screeninfo *ffsi)
 	printf("=================================\n");
 }
 
-void plot_pixel(struct fb_config *fb, int x, int y, int r, int g, int b)
-{
-	int offset = (y * fb->stride) + (x * (fb->bpp >> 3));
-	int r_o = fb->red_offset/fb->red_length;
-	int g_o = fb->green_offset/fb->green_length;
-	int b_o = fb->blue_offset/fb->blue_length;
-	*(fb->data + offset + r_o) = r;
-	*(fb->data + offset + g_o) = g;
-	*(fb->data + offset + b_o) = b;
-	if (fb->transp_length != 0)
-		*(fb->data + offset + fb->transp_offset/fb->transp_length) = 255;
-}
-
-void draw_rect(struct fb_config *fb, int x, int y, int w, int h, int r, int g, int b)
-{
-	int dx, dy;
-
-	for (dy = 0; dy < h; dy++) {
-		for (dx = 0; dx < w; dx++) {
-			plot_pixel(fb, x + dx, y + dy, r, g, b);
-		}
-	}
-}
-
-void clear_screen(struct fb_config *fb, int r, int g, int b)
-{
-	draw_rect(fb, 0, 0, fb->width, fb->height, r, g, b);
-}
-
-void usage(const char *argv_0)
-{
-	printf("\nUsage %s: [-r<red>] [-g<green>] [-b<blue>] [-B<border>] [-i<buffer index>]\n", argv_0);
+void usage(const char *argv_0) {
+	printf("\nUsage %s: [-r<red>] [-g<green>] [-b<blue>]\n", argv_0);
 	printf("  All colors default to 0xff\n");
-	printf("  The border color applies to all rgb and is 10 pixels wide\n");
-	printf("  If border is not provided, none is drawn.\n");
-	printf("  The index defaults to 0, if your FB has more than 1 buffers, you can set it.\n");
-	printf("  If set the index to -1, we will use all buffers for 20 times.\n");
 	exit(1);
 }
 
-int main(int argc, char **argv)
-{
+/**** RGB888颜色定义 ****/
+typedef struct rgb888_type {
+	unsigned char blue;
+	unsigned char green;
+	unsigned char red;
+} __attribute__((packed)) rgb888_t;
+
+/********************************************************************
+ * 函数名称： set_background_color
+ * 功能描述： 将LCD背景颜色设置为指定的颜色
+ * 输入参数： 颜色
+ * 返 回 值： 无
+ ********************************************************************/
+static void set_background_color(struct fb_config *fbp, unsigned int color) {
+	int size = fbp->height * fbp->width;
+	//计算出像素点个数
+	int j;
+	int bpp = fbp->bpp;
+
+	switch (bpp) {
+	case 16: {
+			 // RGB565
+			 unsigned short *base = (unsigned short *)fbp->base;
+			 unsigned short rgb565_color = ((color & 0xF800UL)) |
+				 ((color & 0x07E0UL)) |
+				 ((color & 0x001FUL)); //得到RGB565颜色
+
+			 /* 向每一个像素点填充颜色 */
+			 for (j = 0; j < size; j++)
+				 base[j] = rgb565_color;
+			printf("bpp 16 color.\n");
+
+		 } break;
+
+	case 24: {
+			 // RGB888
+			 rgb888_t *base = (rgb888_t *)fbp->base;
+			 rgb888_t rgb888_color = {
+				 .blue = color & 0xFFUL,
+				 .green = (color << 8) & 0xFFUL,
+				 .red = (color << 16) & 0xFFUL,
+			 };
+
+			 for (j = 0; j < size; j++)
+				 base[j] = rgb888_color;
+
+		 } break;
+
+	default:
+		 fprintf(stderr, "can't surport %dbpp\n", bpp);
+		 break;
+	}
+}
+
+int main(int argc, char **argv) {
 	int fd;
-	unsigned long offset;
 	struct fb_var_screeninfo fvsi;
 	struct fb_fix_screeninfo ffsi;
 	struct fb_config fb;
 	int red = 0xff;
 	int green = 0xff;
 	int blue = 0xff;
-	int border = -1;
 	int opt;
-	int index = 0;
-	int loop = 0;
 
-	while ((opt = getopt(argc, argv, "r:g:b:B:i:h")) != -1) {
+	while ((opt = getopt(argc, argv, "r:g:b:")) != -1) {
 		switch (opt) {
 		case 'r':
 			red = 0xff & strtol(optarg, NULL, 0);
+			printf("red %d\n", red);
 			break;
 
 		case 'g':
 			green = 0xff & strtol(optarg, NULL, 0);
+			printf("green %d\n", green);
 			break;
 
 		case 'b':
 			blue = 0xff & strtol(optarg, NULL, 0);
-			break;
-
-		case 'B':
-			border = 0xff & strtol(optarg, NULL, 0);
-			break;
-
-		case 'i':
-			index = strtol(optarg, NULL, 0);
+			printf("blue %d\n", blue);
 			break;
 
 		default:
@@ -229,21 +244,8 @@ int main(int argc, char **argv)
 	fb.transp_length = fvsi.transp.length;
 	fb.buffer_num = fb.height_virtual / fb.height;
 
-	if (index == -1) {
-		index = 0;
-		loop = 20;
-	}
-	if (index > fb.buffer_num - 1 || index < 0) {
-		printf("Invalid index.\n");
-		exit(1);
-	}
-
-	if (fb.red_length != 8 || fb.green_length != 8 || fb.blue_length != 8) {
-		printf("Don't support this color format\n");
-		goto SKIP_DRAW;
-	}
-
-	fb.base = (char *)mmap((caddr_t) NULL, ffsi.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	fb.base = (char *)mmap((caddr_t)NULL, ffsi.smem_len, PROT_READ | PROT_WRITE,
+			       MAP_SHARED, fd, 0);
 
 	if (fb.base == (char *)-1) {
 		perror("mmap");
@@ -251,33 +253,20 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	offset = (unsigned long) ffsi.smem_start % (unsigned long) getpagesize();
+	/* 背光关闭 */
+	fbdev_blank(fd, true);
 
-	do {
-		fb.data = fb.base + offset + (fb.stride * fb.height) * index;
-		if (border == -1) {
-			clear_screen(&fb, red, green, blue);
-		}
-		else {
-			clear_screen(&fb, border, border, border);
+	/* 刷背景 */
+	set_background_color(&fb, (red << fb.red_offset | green << fb.green_offset | blue << fb.blue_offset));
 
-			// draw a rect 10 pixels in from each border in the color chosen
-			draw_rect(&fb, 10, 10, fb.width - 20, fb.height - 20, red, green, blue);
-		}
-		fvsi.yoffset = index * fvsi.yres;
-		printf("data addr = %p, yoffset = %d\n", fb.data, fvsi.yoffset);
-		ioctl(fb.fd, FBIOPAN_DISPLAY, &fvsi);
-		if (fb.buffer_num > 1)
-			index = (index + 1) % fb.buffer_num;
-		red = 255 - red;
-		green = 255 - green;
-		blue = 255 - blue;
-	}while(loop--);
+	/* 背光开启 */
+	fbdev_blank(fd, false);
 
-SKIP_DRAW:
+	/* 退出 */
+	munmap(fb.base, ffsi.smem_len);
 
+	/* 取消映射 */
 	close(fd);
 
 	return 0;
 }
-
